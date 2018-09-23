@@ -24,7 +24,7 @@ uint32_t trace_buffer = 5000;
 // TIM2 input capture buffer for trace timestamps
 // There is a timestamp for every 2 bytes of receive data. Add a little as buffer
 uint32_t trace_ts[5010];
-uint32_t *ptr_ts = &trace_ts[0];
+uint32_t ts_idx = 0;
 
 // pointers to peripherals
 TIM_HandleTypeDef *tim1;
@@ -51,8 +51,6 @@ void tracer(TIM_HandleTypeDef *htim1, TIM_HandleTypeDef *htim2,
 
 	// Set up UART2 receive to circular DMA commands
 	HAL_UART_Receive_DMA(uart2, &cmd_rx[0], 12);
-
-	trace_enable();
 
 	while (1) {
 
@@ -177,7 +175,10 @@ void trace_enable(void) {
 	tconf.OCNPolarity = TIM_OCNPOLARITY_HIGH;
 	tconf.OCIdleState = TIM_OCIDLESTATE_RESET;
 	tconf.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-	HAL_TIM_OnePulse_ConfigChannel(tim1, &tconf, TIM_CHANNEL_1, TIM_CHANNEL_2);
+	tconf.ICSelection = TIM_ICSELECTION_DIRECTTI;
+	tconf.ICFilter = 0;
+	HAL_TIM_OnePulse_ConfigChannel(tim1, &tconf, TIM_CHANNEL_1,
+	TIM_CHANNEL_2);
 
 	// configure tracer UART
 	uart1->Init.BaudRate = trace_baud_rate;
@@ -200,8 +201,9 @@ void trace_enable(void) {
 	// set up UART1 receive to circular DMA
 	HAL_UART_Receive_DMA(uart1, &trace_rx[0], 2 * trace_buffer);
 
-	// start triggering timer on incoming data
+	// start triggering TIM1 on incoming data
 	HAL_TIM_OnePulse_Start(tim1, TIM_CHANNEL_1);
+
 }
 
 void trace_disable(void) {
@@ -219,7 +221,7 @@ void trace_disable(void) {
 
 void process_trace(uint8_t *data) {
 
-	uint32_t cnt = trace_buffer;
+	uint32_t cnt = trace_buffer/2;
 	uint32_t i;
 	uint8_t *ts;
 	uint8_t *ptr = &tx_buf[5];
@@ -227,11 +229,11 @@ void process_trace(uint8_t *data) {
 	while (cnt--) {
 
 		// get pointer to first byte of timestamp
-		ts = (uint8_t *) ptr_ts++;
+		ts = (uint8_t *) &trace_ts[ts_idx++];
 
 		// wrap timestamp pointer if necessary
-		if (ptr_ts > &trace_ts[5010]) {
-			ptr_ts = &trace_ts[0];
+		if (ts_idx >= 5010) {
+			ts_idx = 0;
 		}
 
 		// copy timestamp to buffer
