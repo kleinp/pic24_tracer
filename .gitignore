@@ -1,0 +1,4 @@
+Debug/
+startup/
+pic24_tracer.elf.launch
+STM32L42KC_FLASH.ld
